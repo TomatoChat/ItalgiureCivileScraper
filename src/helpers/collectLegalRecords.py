@@ -16,6 +16,17 @@ def collectLegalRecords(
     url: str = "https://www.italgiure.giustizia.it/sncass/isapi/hc.dll/sn.solr/sn-collection/select",
     sleep: float = 0.5,
 ) -> List[LegalDocument]:
+    """
+    Collects legal records from the Italgiure Solr API.
+
+    Args:
+        queryObj: The query object to use.
+        limit: The maximum number of records to collect.
+        timeout: The timeout for the request.
+        url: The URL to use.
+        sleep: The sleep time between requests.
+    """
+
     allValidatedDocs: List[LegalDocument] = []
     session = requests.Session()
 
