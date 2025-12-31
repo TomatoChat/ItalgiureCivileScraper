@@ -3,6 +3,7 @@ from typing import List, Optional
 
 import requests
 import urllib3
+from tqdm import tqdm
 
 from src.models import ItalgiureSolrQuery, LegalDocument
 
@@ -47,6 +48,9 @@ def collectLegalRecords(
         }
     )
 
+    totalForProgress = limit if limit else None
+    progressBar = None
+
     while True:
         if limit and len(allValidatedDocs) >= limit:
             break
@@ -64,10 +68,29 @@ def collectLegalRecords(
         totalFound = rawPayload.get("response", {}).get("numFound", 0)
         docsData = rawPayload.get("response", {}).get("docs", [])
 
+        # Initialize progress bar on first iteration
+        if progressBar is None:
+            if limit:
+                totalForProgress = limit
+            elif totalFound > 0:
+                totalForProgress = totalFound
+            else:
+                totalForProgress = None
+
+            progressBar = tqdm(
+                total=totalForProgress,
+                desc="Collecting legal records",
+                unit="documents",
+                initial=len(allValidatedDocs),
+            )
+
         if not docsData:
             break
 
-        allValidatedDocs.extend([LegalDocument(**doc) for doc in docsData])
+        newDocs = [LegalDocument(**doc) for doc in docsData]
+        allValidatedDocs.extend(newDocs)
+
+        progressBar.update(len(newDocs))
 
         if queryObj.start + queryObj.rows >= totalFound:
             break
@@ -75,5 +98,8 @@ def collectLegalRecords(
         queryObj.start += queryObj.rows
 
         time.sleep(sleep)
+
+    if progressBar:
+        progressBar.close()
 
     return allValidatedDocs[:limit] if limit else allValidatedDocs
