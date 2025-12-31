@@ -15,10 +15,13 @@ class LegalDocument(BaseModel):
     section: Optional[str] = Field(None, alias="szdec", description="Section")
     year: Optional[str] = Field(None, alias="anno")
     summary: Optional[List[str]] = Field(None, alias="ocr")
-    italGiureFileName: Optional[str] = Field(
-        None, alias="filename", description="File name on Italgiure"
+    italGiureFileName: str = Field(
+        default="", alias="filename", description="File name on Italgiure"
     )
     hfFileName: str = Field(default="", description="File name on HuggingFace")
+    localPdfPath: Optional[str] = Field(
+        None, description="Local path to downloaded PDF file"
+    )
     originalDecisionCourt: Optional[str] = Field(
         None, description="Original decision court"
     )
@@ -61,12 +64,12 @@ class LegalDocument(BaseModel):
 
     @field_validator("italGiureFileName", mode="before")
     @classmethod
-    def extractFirstFileName(cls, v: Union[None, str, List[str]]) -> Optional[str]:
+    def extractFirstFileName(cls, v: Union[None, str, List[str]]) -> str:
         """Extract first item from fileName list."""
         if v is None:
-            return None
+            return ""
         if isinstance(v, list) and len(v) > 0:
             return v[0]
         elif isinstance(v, str):
             return v
-        return None
+        return ""

@@ -1,5 +1,3 @@
-import json
-import sys
 import tempfile
 from pathlib import Path
 from typing import List, Optional
@@ -7,14 +5,10 @@ from typing import List, Optional
 import pyarrow as pa
 import pyarrow.parquet as pq
 from huggingface_hub import HfApi, login
+from tqdm import tqdm
 
-rootDir = Path(__file__).parent.parent.parent
-
-if str(rootDir) not in sys.path:
-    sys.path.insert(0, str(rootDir))
-
-from settings import settings  # noqa: E402
-from src.models import LegalDocument  # noqa: E402
+from settings import settings
+from src.models import LegalDocument
 
 
 def uploadToHuggingFace(
@@ -22,19 +16,18 @@ def uploadToHuggingFace(
     repoId: str,
     fileName: str = "data.parquet",
     hfToken: Optional[str] = None,
-    commitMessage: Optional[str] = None,
-    useJson: bool = False,
+    uploadPdfs: bool = True,
 ) -> str:
     """
-    Uploads a list of LegalDocument instances to a HuggingFace repository as a Parquet or JSON file.
+    Uploads a list of LegalDocument instances to a HuggingFace repository as a Parquet file.
+    If documents have localPdfPath set, uploads those PDFs to HuggingFace and updates hfFileName.
 
     Args:
-        documents: List of LegalDocument instances to upload.
+        documents: List of LegalDocument instances to upload (should have localPdfPath if PDFs were downloaded).
         repoId: HuggingFace repository ID (e.g., "username/dataset-name").
         fileName: Name of the file to create/update. Defaults to "data.parquet".
         hfToken: HuggingFace token. If None, reads from settings (HF_TOKEN from .env file).
-        commitMessage: Custom commit message. If None, generates a default message.
-        useJson: If True, upload as JSON file instead of Parquet. Defaults to False.
+        uploadPdfs: If True, uploads PDFs that have localPdfPath set. Defaults to True.
 
     Returns:
         URL of the uploaded file in the HuggingFace repository.
@@ -43,46 +36,84 @@ def uploadToHuggingFace(
         ValueError: If no token is provided and HF_TOKEN is not found in environment.
         Exception: If upload fails.
     """
-    if not documents:
-        raise ValueError("documents list cannot be empty")
 
     login(token=hfToken or settings.hf_token)
 
-    dataDicts = [doc.model_dump() for doc in documents]
+    api = HfApi()
+    updatedDocuments = []
+    tempFilePath = None
+    pdfsToCleanup = []
 
-    if useJson or fileName.endswith(".json"):
-        with tempfile.NamedTemporaryFile(
-            suffix=".json", delete=False, mode="w", encoding="utf-8"
-        ) as tempFile:
-            tempFilePath = Path(tempFile.name)
+    try:
+        if uploadPdfs:
+            documentsWithPdfs = [
+                doc
+                for doc in documents
+                if doc.localPdfPath and Path(doc.localPdfPath).exists()
+            ]
 
-            json.dump(dataDicts, tempFile, ensure_ascii=False, indent=2)
-    else:
+            if documentsWithPdfs:
+                with tqdm(
+                    total=len(documentsWithPdfs),
+                    desc="Uploading PDFs to HuggingFace",
+                    unit="PDF",
+                ) as pbar:
+                    for doc in documentsWithPdfs:
+                        pdfPath = Path(doc.localPdfPath or "")
+                        pdfFileName = pdfPath.name
+                        pdfRepoPath = f"documents/{pdfFileName}"
+
+                        api.upload_file(
+                            path_or_fileobj=str(pdfPath),
+                            path_in_repo=pdfRepoPath,
+                            repo_id=repoId,
+                            repo_type="dataset",
+                            commit_message=f"Upload PDF: {pdfFileName}",
+                        )
+
+                        hfPdfUrl = f"https://huggingface.co/datasets/{repoId}/resolve/main/{pdfRepoPath}"
+                        doc.hfFileName = hfPdfUrl
+
+                        pdfsToCleanup.append(pdfPath)
+                        pbar.update(1)
+
+        updatedDocuments: List[LegalDocument] = documents
+
         with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tempFile:
             tempFilePath = Path(tempFile.name)
 
-        table = pa.Table.from_pylist(dataDicts)
-
-        pq.write_table(table, tempFilePath)
-
-    try:
-        api = HfApi()
-
-        if commitMessage is None:
-            commitMessage = f"Upload {len(documents)} legal documents to {fileName}"
+        pq.write_table(
+            pa.Table.from_pylist(
+                [doc.model_dump(exclude={"localPdfPath"}) for doc in updatedDocuments]
+            ),
+            tempFilePath,
+        )
 
         api.upload_file(
             path_or_fileobj=str(tempFilePath),
             path_in_repo=fileName,
             repo_id=repoId,
             repo_type="dataset",
-            commit_message=commitMessage,
+            commit_message=f"Upload dataset: {len(updatedDocuments)} legal documents to {fileName}",
         )
 
-        fileUrl = f"https://huggingface.co/datasets/{repoId}/resolve/main/{fileName}"
-
-        return fileUrl
+        return f"https://huggingface.co/datasets/{repoId}/resolve/main/{fileName}"
 
     finally:
-        if tempFilePath.exists():
+        # Clean up temporary parquet file
+        if tempFilePath and tempFilePath.exists():
             tempFilePath.unlink()
+
+        # Clean up downloaded PDFs after upload
+        for pdfPath in pdfsToCleanup:
+            if pdfPath.exists():
+                pdfPath.unlink()
+
+        # Try to clean up the PDF directory if it's empty
+        if pdfsToCleanup:
+            pdfDir = pdfsToCleanup[0].parent
+            try:
+                if pdfDir.exists() and not any(pdfDir.iterdir()):
+                    pdfDir.rmdir()
+            except OSError:
+                pass
