@@ -25,6 +25,16 @@ def collectLegalRecords(
         timeout: The timeout for the request.
         url: The URL to use.
         sleep: The sleep time between requests.
+
+    Returns:
+        List of LegalDocument instances with camelCase field names:
+        - decisionNumber (mapped from API's 'numdec')
+        - president (mapped from API's 'presidente', first item extracted)
+        - relator (mapped from API's 'relatore', first item extracted)
+        - italGiureFileName (mapped from API's 'filename', first item extracted)
+        - hfFileName (starts empty, for HuggingFace file name)
+        - filingDate (mapped from API's 'datdep', first item extracted)
+        - type, section, year, summary, etc.
     """
 
     allValidatedDocs: List[LegalDocument] = []
