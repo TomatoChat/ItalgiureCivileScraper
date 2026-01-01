@@ -1,9 +1,9 @@
+import csv
+import json
 import tempfile
 from pathlib import Path
 from typing import List, Optional
 
-import pyarrow as pa
-import pyarrow.parquet as pq
 from huggingface_hub import HfApi, login
 from tqdm import tqdm
 
@@ -14,18 +14,18 @@ from src.models import LegalDocument
 def uploadToHuggingFace(
     documents: List[LegalDocument],
     repoId: str,
-    fileName: str = "data.parquet",
+    fileName: str = "data.csv",
     hfToken: Optional[str] = None,
     uploadPdfs: bool = True,
 ) -> str:
     """
-    Uploads a list of LegalDocument instances to a HuggingFace repository as a Parquet file.
+    Uploads a list of LegalDocument instances to a HuggingFace repository as a CSV file.
     If documents have localPdfPath set, uploads those PDFs to HuggingFace and updates hfFileName.
 
     Args:
         documents: List of LegalDocument instances to upload (should have localPdfPath if PDFs were downloaded).
         repoId: HuggingFace repository ID (e.g., "username/dataset-name").
-        fileName: Name of the file to create/update. Defaults to "data.parquet".
+        fileName: Name of the file to create/update. Defaults to "data.csv".
         hfToken: HuggingFace token. If None, reads from settings (HF_TOKEN from .env file).
         uploadPdfs: If True, uploads PDFs that have localPdfPath set. Defaults to True.
 
@@ -79,15 +79,40 @@ def uploadToHuggingFace(
 
         updatedDocuments: List[LegalDocument] = documents
 
-        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tempFile:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False, encoding="utf-8", newline=""
+        ) as tempFile:
             tempFilePath = Path(tempFile.name)
 
-        pq.write_table(
-            pa.Table.from_pylist(
-                [doc.model_dump(exclude={"localPdfPath"}) for doc in updatedDocuments]
-            ),
-            tempFilePath,
-        )
+            if not updatedDocuments:
+                # Write empty CSV with headers if no documents
+                # Use a sample document to get field names
+                sampleDoc = LegalDocument(
+                    id="sample",
+                    decisionNumber="sample",
+                    filingDate="sample",
+                    type="sample",
+                )
+                fieldNames = list(sampleDoc.model_dump(exclude={"localPdfPath"}).keys())
+                writer = csv.DictWriter(tempFile, fieldnames=fieldNames)
+                writer.writeheader()
+            else:
+                # Get field names excluding localPdfPath
+                firstDoc = updatedDocuments[0].model_dump(exclude={"localPdfPath"})
+                fieldNames = list(firstDoc.keys())
+
+                writer = csv.DictWriter(tempFile, fieldnames=fieldNames)
+                writer.writeheader()
+
+                for doc in updatedDocuments:
+                    docDict = doc.model_dump(exclude={"localPdfPath"})
+                    # Convert list fields to JSON strings for CSV compatibility
+                    for key, value in docDict.items():
+                        if isinstance(value, list):
+                            docDict[key] = json.dumps(value, ensure_ascii=False)
+                        elif value is None:
+                            docDict[key] = ""
+                    writer.writerow(docDict)
 
         api.upload_file(
             path_or_fileobj=str(tempFilePath),
@@ -100,7 +125,7 @@ def uploadToHuggingFace(
         return f"https://huggingface.co/datasets/{repoId}/resolve/main/{fileName}"
 
     finally:
-        # Clean up temporary parquet file
+        # Clean up temporary CSV file
         if tempFilePath and tempFilePath.exists():
             tempFilePath.unlink()
 
