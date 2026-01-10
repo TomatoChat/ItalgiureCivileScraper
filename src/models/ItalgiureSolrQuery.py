@@ -1,5 +1,3 @@
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 from .CourtSection import CourtSection
@@ -11,8 +9,8 @@ class ItalgiureSolrQuery(BaseModel):
     """Validated model for Italgiure Solr API parameters."""
 
     kind: DatabaseKind = Field(default=DatabaseKind.CIVILE, alias="kind")
-    section: Optional[CourtSection] = Field(default=None, alias="szdec")
-    year: Optional[int] = Field(default=None, alias="anno")
+    section: CourtSection | None = Field(default=None, alias="szdec")
+    year: int | None = Field(default=None, alias="anno")
     sortOrder: SortOrder = Field(default=SortOrder.NEWEST_FIRST, alias="sort")
     start: int = Field(default=0, ge=0)
     rows: int = Field(default=10, le=500)

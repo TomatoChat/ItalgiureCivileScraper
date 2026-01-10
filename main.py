@@ -18,7 +18,7 @@ def main():
     fileUrl = uploadToHuggingFace(
         documents=documents,
         repoId=settings.hf_repo_id,
-        fileName="data.csv",
+        fileName="data.parquet",
         hfToken=settings.hf_token,
     )
 

@@ -1,7 +1,6 @@
 import tempfile
 import time
 from pathlib import Path
-from typing import List, Optional
 
 import requests
 import urllib3
@@ -16,15 +15,14 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def collectLegalRecords(
     queryObj: ItalgiureSolrQuery,
-    limit: Optional[int] = None,
+    limit: int | None = None,
     timeout: int = 15,
     url: str = "https://www.italgiure.giustizia.it/sncass/isapi/hc.dll/sn.solr/sn-collection/select",
     sleep: float = 0.5,
     downloadPdfs: bool = True,
     pdfTimeout: int = 30,
-) -> List[LegalDocument]:
-
-    allValidatedDocs: List[LegalDocument] = []
+) -> list[LegalDocument]:
+    allValidatedDocs: list[LegalDocument] = []
     session = requests.Session()
     tempPdfDir = None
 

@@ -1,7 +1,6 @@
 import logging
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 import requests
 import urllib3
@@ -15,8 +14,8 @@ def downloadPdfFromItalgiure(
     italGiureFileName: str,
     kind: str = "snciv",
     timeout: int = 30,
-    tempDir: Optional[Path] = None,
-) -> Optional[Path]:  # Changed to Optional
+    tempDir: Path | None = None,
+) -> Path | None:
     """
     Downloads a PDF from the Italgiure 'clean' application path with error handling.
     """
