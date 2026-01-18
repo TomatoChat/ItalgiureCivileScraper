@@ -1,3 +1,4 @@
+from pathlib import Path
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -17,6 +18,9 @@ class LegalDocument(BaseModel):
         default="", alias="filename", description="File name on Italgiure"
     )
     hfFileName: str = Field(default="", description="File name on HuggingFace")
+    localPdfPath: Path | None = Field(
+        default=None, description="Local path to the downloaded PDF file"
+    )
     originalDecisionCourt: str | None = Field(
         None, description="Original decision court"
     )

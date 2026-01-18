@@ -88,7 +88,7 @@ def collectLegalRecords(
                             tempDir=tempPdfDir,
                         )
                         if pdfPath:
-                            doc.localPdfPath = str(pdfPath)
+                            doc.localPdfPath = pdfPath
 
                         pdfProgressBar.update(1)
                     pdfProgressBar.close()
